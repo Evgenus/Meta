@@ -9,7 +9,7 @@ from meta.decompiler.simple_instructions import SimpleInstructions
 from meta.decompiler.control_flow_instructions import CtrlFlowInstructions
 import _ast
 from meta.asttools import print_ast
-from meta.utils import py3, py3op, py2op
+from meta.utils import py3, py3op, py2op, py33
 from meta.decompiler.expression_mutator import ExpressionMutator
 from ast import copy_location as cpy_loc
 
@@ -28,13 +28,9 @@ def merge_ifs(stmnts):
     stmnts.append(last)
     return stmnts 
         
-    
 def pop_doc(stmnts):
-
     doc = pop_assignment(stmnts, '__doc__')
-
     assert isinstance(doc, _ast.Str) or doc is None
-
     return doc
 
 def pop_assignment(stmnts, name):
@@ -81,6 +77,8 @@ def make_module(code):
 def make_function(code, defaults=None, lineno=0):
         from meta.decompiler.disassemble import disassemble
 
+        func_name = code.co_name
+
         instructions = Instructions(disassemble(code))
 
         stmnts = instructions.stmnt()
@@ -108,7 +106,7 @@ def make_function(code, defaults=None, lineno=0):
                               vararg=vararg,
                               lineno=lineno, col_offset=0
                               )
-        if code.co_name == '<lambda>':
+        if func_name == '<lambda>':
             stmnts = merge_ifs(stmnts)
 
             body = _ast.Return(ExpressionMutator().visit(stmnts[0]))
@@ -124,13 +122,16 @@ def make_function(code, defaults=None, lineno=0):
                 assert isinstance(return_.value, _ast.Name)
                 assert return_.value.id == 'None'
                 return_.value = None
-            ast_obj = _ast.FunctionDef(name=code.co_name, args=args, body=stmnts, decorator_list=[], lineno=lineno, col_offset=0)
+            ast_obj = _ast.FunctionDef(name=func_name, args=args, body=stmnts, decorator_list=[], lineno=lineno, col_offset=0)
 
         return ast_obj
 
 @make_function.py3op
-def make_function(code, defaults=None, annotations=(), kw_defaults=(), lineno=0):
+def make_function(code, defaults=None, annotations=(), kw_defaults=(), lineno=0, func_name=None):
         from meta.decompiler.disassemble import disassemble
+
+        if not py33:
+            func_name = code.co_name
 
         instructions = Instructions(disassemble(code))
 
@@ -218,7 +219,7 @@ def make_function(code, defaults=None, annotations=(), kw_defaults=(), lineno=0)
                               )
         
         
-        if code.co_name == '<lambda>':
+        if func_name == '<lambda>':
             stmnts = merge_ifs(stmnts)
 
             body = _ast.Return(ExpressionMutator().visit(stmnts[0]))
@@ -235,7 +236,7 @@ def make_function(code, defaults=None, annotations=(), kw_defaults=(), lineno=0)
                 assert return_.value.id == 'None'
                 return_.value = None
             
-            ast_obj = _ast.FunctionDef(name=code.co_name, args=args,
+            ast_obj = _ast.FunctionDef(name=func_name, args=args,
                                        body=stmnts, decorator_list=[],
                                        returns=returns,
                                        lineno=lineno, col_offset=0)
@@ -286,17 +287,17 @@ class Instructions(CtrlFlowInstructions, SimpleInstructions):
         else:
             item = self.outer_scope.pop_ast_item()
 
-#        print(' ' * level, '- ', end='')
-#        print_ast(item, indent='', newline='')
-#        print()
+        #print(' ' * level, '- ', end='')
+        #print_ast(item, indent='', newline='')
+        #print()
 
         return item
     
     def push_ast_item(self, item):
         
-#        print(' ' * level, '+ ', end='')
-#        print_ast(item, indent='', newline='')
-#        print()
+        #print(' ' * level, '+ ', end='')
+        #print_ast(item, indent='', newline='')
+        #print()
 
         self._ast_stack.append(item)
     
@@ -351,6 +352,12 @@ class Instructions(CtrlFlowInstructions, SimpleInstructions):
     @py3op
     def MAKE_FUNCTION(self, instr):
 
+        func_name = None
+        if py33:
+            name_node = self.pop_ast_item()
+            assert isinstance(name_node, _ast.Str)
+            func_name = name_node.s
+
         code = self.pop_ast_item()
         
         ndefaults = bitrange(instr.oparg, 0, 8)
@@ -369,8 +376,8 @@ class Instructions(CtrlFlowInstructions, SimpleInstructions):
         for i in range(ndefaults):
             defaults.insert(0, self.pop_ast_item())
 
-        function = make_function(code, defaults, lineno=instr.lineno, annotations=annotations, kw_defaults=kw_defaults)
-        
+        function = make_function(code, defaults, lineno=instr.lineno, annotations=annotations, kw_defaults=kw_defaults, func_name=func_name)
+
         doc = code.co_consts[0] if code.co_consts else None
         
         if isinstance(doc, str):
@@ -406,7 +413,6 @@ class Instructions(CtrlFlowInstructions, SimpleInstructions):
     
     @py3op
     def LOAD_BUILD_CLASS(self, instr):
-        
         class_body = []
         
         body_instr = instr
@@ -414,9 +420,9 @@ class Instructions(CtrlFlowInstructions, SimpleInstructions):
         while body_instr.opname not in function_ops:
             body_instr = self.ilst.pop(0)
             class_body.append(body_instr)
-            
+
         call_func = self.decompile_block(class_body, stack_items=[None]).stmnt()
-        
+
         assert len(call_func) == 1
         call_func = call_func[0]
         
@@ -428,7 +434,7 @@ class Instructions(CtrlFlowInstructions, SimpleInstructions):
         keywords = call_func.keywords
         kwargs = call_func.kwargs
         starargs = call_func.starargs
-                
+    
         if isinstance(code[0], _ast.Expr):
             _name = code.pop(1)
             _doc = code.pop(1)

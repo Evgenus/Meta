@@ -8,7 +8,7 @@ import _ast
 from meta.asttools import Visitor
 from string import Formatter
 import sys
-from meta.utils import py3op, py2op
+from meta.utils import py3op, py2op, py33
 from contextlib import contextmanager
 
 if sys.version_info.major < 3:
@@ -634,11 +634,23 @@ class SourceGen(ExprSourceGen):
                    'None' if node.globals is None else str_node(node.globals),
                    'None' if node.locals is None else str_node(node.locals))
 
+    def print_with_context(self, item):
+        self.print("{0:node}", item.context_expr)
+        if item.optional_vars is not None:
+            self.print(' as {0:node}', item.optional_vars, level=0)
+
     def visitWith(self, node):
-        self.print('with {0:node}', node.context_expr)
-        if node.optional_vars is not None:
-            self.print(' as {0:node}', node.optional_vars, level=0)
-        self.print(':', level=0)
+        if py33:
+            self.print('with ')
+            if node.items:
+                self.print_with_context(node.items[0])
+                for item in node.items[1:]:
+                    self.print_with_context(item)
+            self.print(':', level=0)
+        else:
+            self.print('with ')
+            self.print_with_context(node)
+            self.print(':', level=0)
 
         with self.indenter:
             if node.body:
@@ -704,7 +716,7 @@ class SourceGen(ExprSourceGen):
         if node.value is not None:
             self.print('return {:node}\n', node.value)
 
-    def visitTryExcept(self, node):
+    def visitTry(self, node):
         self.print('try:')
 
         with self.indenter:
@@ -722,6 +734,32 @@ class SourceGen(ExprSourceGen):
             with self.indenter:
                 for stmnt in node.orelse:
                     self.visit(stmnt)
+
+        if node.finalbody:
+            self.print('finally:')
+
+            with self.indenter:
+                for item in node.finalbody:
+                    self.visit(item)
+
+    def visitTryExcept(self, node):
+        self.print('try:')
+
+        with self.indenter:
+            if node.body:
+                for stmnt in node.body:
+                    self.visit(stmnt)
+            else:
+                self.print('pass')
+        for hndlr in node.handlers:
+            self.visit(hndlr)
+
+        if node.orelse:
+            self.print('else:')
+            with self.indenter:
+                for stmnt in node.orelse:
+                    self.visit(stmnt)
+
     @py2op
     def visitExceptHandler(self, node):
 

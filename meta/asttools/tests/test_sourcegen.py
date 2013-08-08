@@ -49,6 +49,11 @@ class Test(unittest.TestCase):
         gen.visit(module)
         generated_source = gen.dumps()
 
+        print("expected")
+        print(source)
+        print("got")
+        print(generated_source)
+
         self.assertMultiLineEqual(source, generated_source.strip('\n'))
 
 class TestSimple(Test):

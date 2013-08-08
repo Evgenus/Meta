@@ -8,6 +8,7 @@ from __future__ import print_function
 
 import opcode
 from dis import findlabels, findlinestarts
+import types
 import sys
 from meta.bytecodetools.instruction import Instruction
 
@@ -22,7 +23,7 @@ def disassembler(co, lasti= -1):
     :yields: Instructions.
     
     """
-
+    assert isinstance(co, types.CodeType)
     code = co.co_code
     labels = findlabels(code)
     linestarts = dict(findlinestarts(co))

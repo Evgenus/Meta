@@ -8,7 +8,7 @@ import opcode
 import _ast
 from meta.bytecodetools.instruction import Instruction
 from meta.asttools.visitors.print_visitor import print_ast
-from meta.utils import py3op, py2op, py3
+from meta.utils import py3op, py2op, py3, py33
 AND_JUMPS = ['JUMP_IF_FALSE_OR_POP', 'POP_JUMP_IF_FALSE']
 OR_JUMPS = ['JUMP_IF_TRUE_OR_POP', 'POP_JUMP_IF_TRUE']
 JUMPS = AND_JUMPS + OR_JUMPS
@@ -242,6 +242,16 @@ class CtrlFlowInstructions(object):
 
         return end, handlers
     
+    if py33:
+        def create_try_except_node(self, body, handlers, orelse, lineno, col_offset):
+            return _ast.Try(body=body, finalbody=[], handlers=handlers, orelse=orelse, lineno=lineno, col_offset=col_offset)
+        def create_try_finally_node(self, body, finalbody):
+            return _ast.Try(body=body, finalbody=finalbody)
+    else:
+        def create_try_except_node(self, body, handlers, orelse, lineno, col_offset):
+            return _ast.TryExcept(body=body, handlers=handlers, orelse=orelse, lineno=lineno, col_offset=col_offset)
+        def create_try_finally_node(self, body, finalbody):
+            return _ast.TryFinally(body=body, finalbody=finalbody)
 
 #    @py3op
     def do_try_except_block(self, block):
@@ -262,7 +272,7 @@ class CtrlFlowInstructions(object):
 
         finally_ = self.decompile_block(finally_block).stmnt()
 
-        try_finally = _ast.TryFinally(body=try_except, finalbody=finally_)
+        try_finally = self.create_try_finally_node(body=try_except, finalbody=finally_)
         
         self.push_ast_item(try_finally)
 
@@ -346,7 +356,7 @@ class CtrlFlowInstructions(object):
         else:
             else_ = []
 
-        try_except = _ast.TryExcept(body=body, handlers=handlers, orelse=else_, lineno=instr.lineno, col_offset=0)
+        try_except = self.create_try_except_node(body=body, handlers=handlers, orelse=else_, lineno=instr.lineno, col_offset=0)
 
         self.push_ast_item(try_except)
 
@@ -376,7 +386,7 @@ class CtrlFlowInstructions(object):
         else:
             else_ = []
 
-        try_except = _ast.TryExcept(body=body, handlers=handlers, orelse=else_, lineno=instr.lineno, col_offset=0)
+        try_except = self.create_try_except_node(body=body, handlers=handlers, orelse=else_, lineno=instr.lineno, col_offset=0)
 
         self.push_ast_item(try_except)
     

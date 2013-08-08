@@ -42,7 +42,7 @@ def assert_ast_eq(testcase, orig_ast, expected_ast):
     if not cmp_ast(orig_ast, expected_ast):
         str1 = str_ast(orig_ast, indent=' ', newline='\n')
         str2 = str_ast(expected_ast, indent=' ', newline='\n')
-        msg = 'AST Trees are not equal\n## left ########### \n%s\n## right ########### \n%s' % (str1, str2)
+        msg = 'AST Trees are not equal\n## got ########### \n%s\n## expected ########### \n%s' % (str1, str2)
         testcase.fail(msg)
 
 

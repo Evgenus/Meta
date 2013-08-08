@@ -5,6 +5,7 @@ Created on Jul 18, 2011
 '''
 import _ast
 from meta.asttools import Visitor, visit_children
+from meta.utils import py33
 
 def removeable(self, node):
     '''
@@ -102,9 +103,21 @@ class PruneVisitor(Visitor):
 
     def visitWith(self, node):
         self.reduce(node.body)
+        len_body = len(node.body)
 
-        if len(node.body) == 0:
+        if len_body == 0:
             node.body.append(Pass(node))
+
+        if py33:
+            items = []
+            for item in node.items:
+                if item.optional_vars is None or self.visit(item.optional_vars):
+                    continue
+                items.append(item)
+            node.items = items
+
+            return len(items) == 0 and len_body == 0
+        else:
             if node.optional_vars is None or self.visit(node.optional_vars):
                 return True
             else:
@@ -138,6 +151,37 @@ class PruneVisitor(Visitor):
         else:
             return node.name in self.remove_symbols
 
+    # For python 3.3 grammar. Check Parser/Python.asdl releases
+    def visitTry(self, node):
+        self.reduce(node.body)
+
+        len_body = len(node.body)
+
+        if len_body == 0:
+            node.body.append(Pass(node))
+
+        len_final = len(node.finalbody)
+        if len_final > 0:
+            self.reduce(node.finalbody)
+            len_final = len(node.finalbody)
+            if len_final == 0:
+                node.finalbody.append(Pass(node))
+
+        for hndlr in node.handlers:
+            self.reduce(hndlr.body)
+            if len(hndlr.body) == 0:
+                hndlr.body.append(Pass(hndlr))
+
+        if len_body == 0:
+            node.handlers = [_ast.ExceptHandler(type=None, name=None, body=[Pass(node)], lineno=node.lineno, col_offset=node.col_offset)]
+
+        self.reduce(node.orelse)
+        len_orelse = len(node.orelse)
+
+        return len_body == 0 and len_final == 0 and len_orelse == 0
+
+
+    # For python 3.2 grammar
     def visitTryFinally(self, node):
 
         assert len(node.body)
@@ -151,6 +195,7 @@ class PruneVisitor(Visitor):
 
         return remove_body and len_final == 0
 
+    # For python 3.2 grammar
     def visitTryExcept(self, node):
 
         self.reduce(node.body)

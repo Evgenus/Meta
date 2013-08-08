@@ -248,6 +248,44 @@ class ConditionalSymbolVisitor(Visitor):
         if node.cause:
             self.update_stable_rhs(get_symbols(node.cause, ast.Load))
 
+    def visitTry(self, node):
+
+        gen = ConditionalSymbolVisitor()
+        gen.visit_list(node.body)
+
+        self.update_undefined(gen.undefined)
+
+        handlers = [csv(hndlr) for hndlr in node.handlers]
+
+        for g in handlers:
+            self.update_undefined(g.undefined)
+
+        stable_rhs = gen.stable_rhs.intersection(*[g.stable_rhs for g in handlers])
+        self.update_stable_rhs(stable_rhs)
+
+        all_rhs = gen.rhs.union(*[g.rhs for g in handlers])
+
+        self.update_cond_rhs(all_rhs - stable_rhs)
+
+        stable_lhs = gen.stable_lhs.intersection(*[g.stable_lhs for g in handlers])
+        self.update_stable_lhs(stable_lhs)
+
+        all_lhs = gen.lhs.union(*[g.lhs for g in handlers])
+        self.update_cond_lhs(all_lhs - stable_lhs)
+
+        gen = ConditionalSymbolVisitor()
+        gen.visit_list(node.orelse)
+
+        self.update_undefined(gen.undefined)
+        self.update_cond_lhs(gen.lhs)
+        self.update_cond_rhs(gen.rhs)
+
+        gen = ConditionalSymbolVisitor()
+        gen.visit_list(node.finalbody)
+        self.update_undefined(gen.undefined)
+        self.update_stable_lhs(gen.lhs)
+        self.update_stable_rhs(gen.rhs)
+
     def visitTryExcept(self, node):
 
         gen = ConditionalSymbolVisitor()
